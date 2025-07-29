@@ -158,40 +158,44 @@ func (sm *SystemMonitor) GetServerInfo() *ServerInfo {
 	return info
 }
 
-// 更新config.json中的Version字段
+// 更新config.json中的Version字段（异步执行）
 func updateConfigVersion(version string) {
-	configPath := ".\\Panel_Setting\\config.json"
-	file, err := os.OpenFile(configPath, os.O_RDWR, 0644)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-	var cfg map[string]interface{}
-	if err := json.NewDecoder(file).Decode(&cfg); err != nil {
-		return
-	}
-	cfg["Version"] = version
-	file.Seek(0, 0)
-	file.Truncate(0)
-	json.NewEncoder(file).Encode(cfg)
+	go func() {
+		configPath := ".\\Panel_Setting\\config.json"
+		file, err := os.OpenFile(configPath, os.O_RDWR, 0644)
+		if err != nil {
+			return
+		}
+		defer file.Close()
+		var cfg map[string]interface{}
+		if err := json.NewDecoder(file).Decode(&cfg); err != nil {
+			return
+		}
+		cfg["Version"] = version
+		file.Seek(0, 0)
+		file.Truncate(0)
+		json.NewEncoder(file).Encode(cfg)
+	}()
 }
 
-// 更新config.json中的LoaderVersion字段
+// 更新config.json中的LoaderVersion字段（异步执行）
 func updateConfigLoaderVersion(loader string) {
-	configPath := ".\\Panel_Setting\\config.json"
-	file, err := os.OpenFile(configPath, os.O_RDWR, 0644)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-	var cfg map[string]interface{}
-	if err := json.NewDecoder(file).Decode(&cfg); err != nil {
-		return
-	}
-	cfg["LoaderVersion"] = loader
-	file.Seek(0, 0)
-	file.Truncate(0)
-	json.NewEncoder(file).Encode(cfg)
+	go func() {
+		configPath := ".\\Panel_Setting\\config.json"
+		file, err := os.OpenFile(configPath, os.O_RDWR, 0644)
+		if err != nil {
+			return
+		}
+		defer file.Close()
+		var cfg map[string]interface{}
+		if err := json.NewDecoder(file).Decode(&cfg); err != nil {
+			return
+		}
+		cfg["LoaderVersion"] = loader
+		file.Seek(0, 0)
+		file.Truncate(0)
+		json.NewEncoder(file).Encode(cfg)
+	}()
 }
 
 // 删除ANSI转义序列等多余文本
