@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,8 +10,9 @@ import (
 
 	"github.com/gorilla/websocket"
 )
+
 // 配置结构体
- type Config struct {
+type Config struct {
 	Port string `json:"port"`
 }
 
@@ -34,8 +34,8 @@ func loadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
-var version = "DEV20250816"//全局 版本号
-var Protocol = "500"//全局 协议版本号
+var version = "DEV20250816" //全局 版本号
+var Protocol = "500"        //全局 协议版本号
 
 // 启动WebSocket服务器
 func OpenWebsocket(config *Config) {
@@ -60,59 +60,59 @@ func OpenWebsocket(config *Config) {
 		// 将HTTP连接升级为WebSocket连接
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("WebSocket升级失败: %v", err)
+			log.Printf("[ERROR]WebSocket升级失败: %v", err)
 			return
 		}
 		defer conn.Close()
 
-		log.Printf("客户端已连接: %s", r.RemoteAddr)
+		log.Printf("[INFO]客户端已连接: %s", r.RemoteAddr)
 
 		// 持续监听消息
 		for {
 			// 读取消息
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Printf("读取消息错误: %v", err)
+				log.Printf("[ERROR]读取消息错误: %v", err)
 				break
 			}
 
-			log.Printf("收到消息: %s", message)
+			//解析消息
+			API_resolve(message) //进入API处理
 
 			// 回复消息
-			err = conn.WriteMessage(websocket.TextMessage, []byte("已收到消息: " + string(message)))
+			err = conn.WriteMessage(websocket.TextMessage, responseData)
 			if err != nil {
-				log.Printf("发送消息错误: %v", err)
+				log.Printf("[ERROR]发送消息错误: %v", err)
 				break
 			}
 		}
 	})
 
 	// 启动HTTP服务器
-	log.Printf("WebSocket服务器已启动，监听端口: %s", port)
+	log.Printf("[INFO]WebSocket服务器已启动，监听端口: %s", port)
+
 	err := http.ListenAndServe(port, nil)
 	if err != nil {
-		log.Fatalf("服务器启动失败: %v", err)
+		log.Fatalf("[ERROR]服务器启动失败: %v", err)
 	}
 }
 
 func main() {
 	// 开始运行该程序的提示
-	fmt.Println("[ZCP2-Server-BDS]已启动\n版本: " + version + "\n协议版本:" + Protocol)
+	log.Printf("[INFO]ZCP2-Server-BDS已启动，版本: %s，协议版本:%s", version, Protocol)
 	startTime := time.Now()
-	log.Printf("[ZCP2-Server-BDS]启动时间: %s", startTime.Format("2006-01-02 15:04:05"))
-
+	log.Printf("[INFO]启动时间: %s", startTime.Format("2006-01-02 15:04:05"))
 
 	// 读取配置文件
 	configPath := filepath.Join("Panel_Setting", "config.json")
 	config, err := loadConfig(configPath)
 	if err != nil {
-		log.Printf("读取配置文件失败，使用默认端口: %v", err)
+		log.Printf("[ERROR]读取配置文件失败，使用默认端口: %v", err)
 		// 使用默认端口
 		config = &Config{
 			Port: ":62001",
 		}
 	}
-
-	// 启动服务器
+	// 启动websocket连接
 	OpenWebsocket(config)
 }
