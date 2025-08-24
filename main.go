@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -37,6 +38,30 @@ func loadConfig(path string) (*Config, error) {
 var version = "DEV20250816" //全局 版本号
 var Protocol = "500"        //全局 协议版本号
 
+// 用于存储客户端连接状态
+var clientConnections = make(map[string]*ClientConnection)
+var connectionsMutex sync.RWMutex
+
+// ClientConnection 表示一个客户端连接
+type ClientConnection struct {
+	Conn         *websocket.Conn
+	IsLoggedIn   bool
+	LastPingTime time.Time
+	RemoteAddr   string
+}
+
+// SetClientLoggedIn 设置客户端的登录状态
+// clientID: 客户端唯一标识
+// isLoggedIn: 登录状态
+func SetClientLoggedIn(clientID string, isLoggedIn bool) {
+	connectionsMutex.Lock()
+	if clientConn, exists := clientConnections[clientID]; exists {
+		clientConn.IsLoggedIn = isLoggedIn
+		log.Printf("[INFO]客户端 %s 登录状态已更新为: %v", clientID, isLoggedIn)
+	}
+	connectionsMutex.Unlock()
+}
+
 // 启动WebSocket服务器
 func OpenWebsocket(config *Config) {
 	// 获取端口号
@@ -65,7 +90,68 @@ func OpenWebsocket(config *Config) {
 		}
 		defer conn.Close()
 
-		log.Printf("[INFO]客户端已连接: %s", r.RemoteAddr)
+		// 获取客户端远程地址作为标识
+		clientID := r.RemoteAddr
+		log.Printf("[INFO]客户端已连接: %s", clientID)
+
+		// 创建客户端连接对象并存储
+		clientConn := &ClientConnection{
+			Conn:         conn,
+			IsLoggedIn:   false,
+			LastPingTime: time.Now(),
+			RemoteAddr:   clientID,
+		}
+
+		connectionsMutex.Lock()
+		clientConnections[clientID] = clientConn
+		connectionsMutex.Unlock()
+
+		// 确保在函数退出时删除连接信息
+		defer func() {
+			connectionsMutex.Lock()
+			delete(clientConnections, clientID)
+			connectionsMutex.Unlock()
+			log.Printf("[INFO]客户端已断开连接: %s", clientID)
+		}()
+
+		// 设置ping处理器来检测连接活跃状态
+		conn.SetPongHandler(func(string) error {
+			connectionsMutex.Lock()
+			if connInfo, exists := clientConnections[clientID]; exists {
+				connInfo.LastPingTime = time.Now()
+			}
+			connectionsMutex.Unlock()
+			return nil
+		})
+
+		// 启动ping发送协程，每分钟检查连接状态
+		pingTicker := time.NewTicker(time.Minute)
+		defer pingTicker.Stop()
+
+		go func() {
+			for range pingTicker.C {
+				connectionsMutex.RLock()
+				connInfo, exists := clientConnections[clientID]
+				connectionsMutex.RUnlock()
+
+				if !exists {
+					return
+				}
+
+				// 检查是否超过一分钟未收到ping包
+				if time.Since(connInfo.LastPingTime) > time.Minute {
+					log.Printf("[WARNING]客户端 %s 超过一分钟未收到ping包，断开连接", clientID)
+					conn.Close()
+					return
+				}
+
+				// 发送ping包以保持连接活跃
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
+					log.Printf("[ERROR]发送ping消息失败: %v", err)
+					return
+				}
+			}
+		}()
 
 		// 持续监听消息
 		for {
@@ -77,13 +163,15 @@ func OpenWebsocket(config *Config) {
 			}
 
 			//解析消息
-			API_resolve(message) //进入API处理
+			responseData := API_resolve(message, clientID) //进入API处理并获取响应
 
-			// 回复消息
-			err = conn.WriteMessage(websocket.TextMessage, responseData)
-			if err != nil {
-				log.Printf("[ERROR]发送消息错误: %v", err)
-				break
+			// 如果有响应数据，则发送
+			if len(responseData) > 0 {
+				err = conn.WriteMessage(websocket.TextMessage, responseData)
+				if err != nil {
+					log.Printf("[ERROR]发送消息错误: %v", err)
+					break
+				}
 			}
 		}
 	})
