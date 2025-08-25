@@ -2,7 +2,7 @@
 
 使用golang进行开发，针对 **[Bedrock Dedicated Server](https://www.minecraft.net/zh-hans/download/server/bedrock)** 进行适配的服务端
 
-此仓库的主要介绍文档在 ZCP2的 **[主仓库](https://www.github.com/ZCP2-DEV/zephyr-craft-panel-2)** ，如有需要可以前往
+此仓库的主要介绍文档在 ZCP2的 **[主仓库](https://github.com/ZCP2-Dev/ZephyrCraft-Panel-2)** ，如有需要可以前往
 
 ## 编译步骤
 
